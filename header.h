@@ -16,7 +16,13 @@
 #include "itkOtsuThresholdImageFilter.h"
 #include "itkRGBToLuminanceImageFilter.h"
 #include "itkGDCMImageIO.h"
-
+#include "itkMedianImageFilter.h"
+#include "itkAdaptiveHistogramEqualizationImageFilter.h"
+#include "itkBinaryFillholeImageFilter.h"
+#include "itkRelabelComponentImageFilter.h"
+#include "itkExpNegativeImageFilter.h"
+#include "itkInvertIntensityImageFilter.h"
+#include "itkBinaryShapeOpeningImageFilter.h"
 
 using namespace std;
 using namespace itk;
@@ -34,5 +40,14 @@ typedef MeanImageFilter< GrayImage, GrayImage > 		MeanFilterType;
 typedef OtsuThresholdImageFilter<GrayImage, GrayImage> OtsuFilterType;
 typedef ScalarToRGBColormapImageFilter<LabeledImageType, RGBImageType> RGBFilterType;
 typedef RGBToLuminanceImageFilter< RGBImageType, GrayImage> RGBToGrayScaleFilter;
-typedef Image< InputPixelType, InputDimension > DICOMImageType;
-typedef ImageFileReader<DICOMImageType> DICOMImageReader;
+typedef AdaptiveHistogramEqualizationImageFilter<GrayImage> HistogramEqualization;
+typedef MedianImageFilter<GrayImage,GrayImage> MedianFilterType;
+typedef BinaryFillholeImageFilter<GrayImage> ImageFill;
+typedef RelabelComponentImageFilter<GrayImage, GrayImage> LabelRelabelComponentType;
+typedef itk::ExpNegativeImageFilter< GrayImage, GrayImage > NegativeFilterType;
+typedef itk::InvertIntensityImageFilter <GrayImage>
+        InvertIntensityImageFilterType;
+typedef BinaryShapeOpeningImageFilter<GrayImage>  BinaryShapeOpeningImage;
+typedef WatershedImageFilter<GrayImage> WatershedFilterType;
+//typedef Image< InputPixelType, InputDimension > DICOMImageType;
+//typedef ImageFileReader<DICOMImageType> DICOMImageReader;

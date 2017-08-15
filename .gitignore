@@ -1,2 +1,12 @@
 build
 result
+.idea
+CMakeCache.txt
+CMakeFiles
+ITKIOFactoryRegistration
+Makefile
+WatershedImageFilter
+WatershedImageFilter.cbp
+cmake-build-debug
+cmake_install.cmake
+

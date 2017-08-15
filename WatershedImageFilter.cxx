@@ -5,6 +5,9 @@
 #include <sstream>
 #include <itkMeanImageFilter.h>
 #include <itkRGBToLuminanceImageFilter.h>
+#include <itkAdaptiveHistogramEqualizationImageFilter.h>
+#include <itkExpNegativeImageFilter.h>
+
 // Run with:
 // ./WatershedImageFilter threshold level
 // e.g.
@@ -32,7 +35,85 @@ GrayImage::Pointer meanFilter(GrayImage::Pointer input) {
     return filter->GetOutput();
 }
 
-std::string floatToString (float number){
+GrayImage::Pointer gradient(GrayImage::Pointer input) {
+    GradientMagnitudeImageFilterType::Pointer gradientMagnitudeImageFilter = GradientMagnitudeImageFilterType::New();
+    gradientMagnitudeImageFilter->SetInput(input);
+    gradientMagnitudeImageFilter->Update();
+    return gradientMagnitudeImageFilter->GetOutput();
+}
+
+GrayImage::Pointer medianFilter(GrayImage::Pointer input) {
+    MedianFilterType::Pointer filter = MedianFilterType::New();
+    filter->SetInput(input);
+    filter->Update();
+    return filter->GetOutput();
+}
+
+GrayImage::Pointer histogramEqualization(GrayImage::Pointer input) {
+    HistogramEqualization::Pointer adapter =  HistogramEqualization::New();
+    adapter->SetInput(input);
+    adapter->Update();
+    return adapter->GetOutput();
+}
+
+GrayImage::Pointer imfill(GrayImage::Pointer input) {
+    ImageFill::Pointer imfill =  ImageFill::New();
+    imfill->SetInput(input);
+    imfill->SetForegroundValue( itk::NumericTraits<unsigned char>::min() );
+    imfill->Update();
+    return imfill->GetOutput();
+}
+
+GrayImage::Pointer negativeImage(GrayImage::Pointer input) {
+    InvertIntensityImageFilterType::Pointer invertIntensityFilter
+            = InvertIntensityImageFilterType::New();
+    invertIntensityFilter->SetInput(input);
+    invertIntensityFilter->SetMaximum(255);
+    invertIntensityFilter->Update();
+    return invertIntensityFilter->GetOutput();
+}
+
+GrayImage::Pointer removeSmallObject(GrayImage::Pointer input) {
+    BinaryShapeOpeningImage::Pointer filter = BinaryShapeOpeningImage::New();
+    filter->SetInput(input);
+    GrayImage::SizeType inputSize = input->GetLargestPossibleRegion().GetSize();
+    double minSize = inputSize[0] * inputSize[1] * 0.2;
+    cout << "min size: " << minSize << endl;
+    filter->SetLambda(minSize);
+//    filter->SetAttribute("Size");
+    filter->Update();
+    return filter->GetOutput();
+}
+
+LabeledImageType::Pointer watershedSegmentation(GrayImage::Pointer inputImage, double threshold, double level) {
+    WatershedFilterType::Pointer watershed = WatershedFilterType::New();
+    watershed->SetThreshold(threshold);
+    watershed->SetLevel(level);
+    watershed->SetInput(inputImage);
+//    try {
+        watershed->Update();
+//    } catch (exception &e) {
+//            printf("exception: %s", e.what());
+//    }
+    return watershed->GetOutput();
+}
+
+GrayImage::Pointer RGBToGrayScale(RGBImageType::Pointer input) {
+    RGBToGrayScaleFilter::Pointer colormapImageFilter = RGBToGrayScaleFilter::New();
+    colormapImageFilter->SetInput(input);
+    colormapImageFilter->Update();
+    return colormapImageFilter->GetOutput();
+}
+
+void writeImage(string imageName, string directory, GrayImage::Pointer image) {
+    FileWriterType::Pointer writer = FileWriterType::New();
+    std::string filePath = "../result/" + directory + "/"  + imageName;
+    writer->SetFileName(filePath);
+    writer->SetInput(image);
+    writer->Update();
+}
+
+std::string floatToString (double number){
     std::ostringstream buff;
     buff<<number;
     return buff.str();
@@ -40,120 +121,70 @@ std::string floatToString (float number){
 
 int main(int argc, char *argv[]) {
 
-    if (argc < 1) {
-        return 0;
-    }
-
-    std::string fileName = argv[1];
+//    if (argc < 1) {
+//        return 0;
+//    }
+//    argv[1] = "2-11-500-500-100";
+    std::string fileName = argc < 2? "2-11-500-500-100.jpg" : argv[1];
     cout << fileName << endl;
-//    ImageReader::Pointer reader = ImageReader::New();
-    DICOMImageReader::Pointer reader = DICOMImageReader::New();
+    ImageReader::Pointer reader = ImageReader::New();
+//    DICOMImageReader::Pointer reader = DICOMImageReader::New();
     reader->SetFileName(fileName);
     GrayImage::Pointer image = reader->GetOutput();
-    GradientMagnitudeImageFilterType::Pointer gradientMagnitudeImageFilter = GradientMagnitudeImageFilterType::New();
-    gradientMagnitudeImageFilter->SetInput(reader->GetOutput());
-    gradientMagnitudeImageFilter->Update();
-    GrayImage::Pointer imageToProcess = meanFilter(gradientMagnitudeImageFilter->GetOutput());
+//    image = medianFilter(image);
+    image = gradient(image);
+//    image = negativeImage(image);
+
     WatershedSegment::Pointer watershed = WatershedSegment::New();
-    FileWriterType::Pointer writer = FileWriterType::New();
-
     RGBFilterType::Pointer colormapImageFilter = RGBFilterType::New();
-    RGBToGrayScaleFilter::Pointer converter = RGBToGrayScaleFilter::New();
-
+    GrayImage::Pointer imageToProcess = medianFilter(image);
     register int levelIndex;
     register int thresholdIndex;
-    float threshold;
-    float level;
+    double threshold;
+    double level;
     int levelQuantity = 50;
     int thresholdQuantity = 50;
-//    for (levelIndex = 1; levelIndex < levelQuantity; levelIndex ++) {
+    for (levelIndex = 1; levelIndex < levelQuantity; levelIndex ++) {
 //        for (thresholdIndex = 1; thresholdIndex < thresholdQuantity; thresholdIndex ++) {
-//            threshold = (float) 0.4 * thresholdIndex/thresholdQuantity;
-//            level = (float) levelIndex/levelQuantity;
-            threshold = 0.048;
-            level = 0.24;
+            level = (double) levelIndex/levelQuantity;
+            threshold = level * (levelQuantity%2==0?0.01 : 0.05);
+            if (threshold >= level) continue;
+
+//    level = 0.24;
+//    threshold = 0.048;
+//    if (argc == 4) {
+//        std::string strLevel = argv[2];
+//        std::string strThreshold = argv[3];
+//        std::stringstream ssLevel;
+//        std::stringstream ssThreshold;
+//        ssLevel << strLevel;
+//        ssLevel >> level;
+//        ssThreshold << strThreshold;
+//        ssThreshold >> threshold;
+//    }
+
             std::string fileOut = getFileNameWithoutExtension(fileName) + "_threshold_" +
                                   floatToString(threshold) + "_level_" + floatToString(level) + "output.png";
             cout << "executing: " << fileOut << endl;
 
-            LabeledImageType::Pointer labeledImage = watershed
-                    ->setInputImage(imageToProcess)
-                    ->setLevel(level)
-                    ->setThreshold(threshold)
-                    ->execute();
+            LabeledImageType::Pointer labeledImage = watershedSegmentation(imageToProcess, threshold, level);
 
             colormapImageFilter->SetInput(labeledImage);
             colormapImageFilter->SetColormap(RGBFilterType::Jet);
             colormapImageFilter->Update();
 
-            converter->SetInput(colormapImageFilter->GetOutput());
-            converter->Update();
+            GrayImage::Pointer resultImage = RGBToGrayScale(colormapImageFilter->GetOutput());
 
             OtsuFilterType::Pointer otsu = OtsuFilterType::New();
-            otsu->SetInput(converter->GetOutput());
+            otsu->SetInput(resultImage);
             otsu->Update();
 
-            std::string filePath = "../result/" + fileOut;
-            writer->SetFileName(filePath);
-            writer->SetInput(otsu->GetOutput());
-            writer->Update();
-//        }
-//    }
-}
 
-    // Parse arguments
-//    float threshold = 0.005;
-//    float level = 0.5;
-//
-//    ImageReader::Pointer imageReader = ImageReader::New();
-//    std::string fileName = "coins.jpg";
-//    imageReader->SetFileName(fileName);
-//    UnsignedCharImageType::Pointer image = UnsignedCharImageType::New();
-//    image->setFileName("");
-//    UnsignedCharImageType::Pointer reader = UnsignedCharImageType::New();
-//    reader->SetFileName(argv[1]);
-//    UnsignedCharImageType::Pointer image = imageReader->GetOutput();
-//
-//
-//    GradientMagnitudeImageFilterType::Pointer gradientMagnitudeImageFilter = GradientMagnitudeImageFilterType::New();
-//    gradientMagnitudeImageFilter->SetInput(image);
-//    gradientMagnitudeImageFilter->Update();
-//
-//    // Custom parameters
-//    PerformSegmentation(gradientMagnitudeImageFilter->GetOutput(), threshold, level);
-//
-//    // Fixed parameters
-//    PerformSegmentation(gradientMagnitudeImageFilter->GetOutput(), .0025, .25);
-//    PerformSegmentation(gradientMagnitudeImageFilter->GetOutput(), .005, .5);
-//    PerformSegmentation(gradientMagnitudeImageFilter->GetOutput(), .0075, .75);
-//    PerformSegmentation(gradientMagnitudeImageFilter->GetOutput(), .009, .9);
-//
-//    return EXIT_SUCCESS;
-//}
-//
-//
-//void PerformSegmentation(FloatImageType::Pointer image, const float threshold, const float level)
-//{
-//    typedef itk::WatershedImageFilter<FloatImageType> WatershedFilterType;
-//    WatershedFilterType::Pointer watershed = WatershedFilterType::New();
-//    watershed->SetThreshold(threshold);
-//    watershed->SetLevel(level);
-//    watershed->SetInput(image);
-//    watershed->Update();
-//
-//    typedef itk::ScalarToRGBColormapImageFilter<LabeledImageType, RGBImageType> RGBFilterType;
-//    RGBFilterType::Pointer colormapImageFilter = RGBFilterType::New();
-//    colormapImageFilter->SetInput(watershed->GetOutput());
-//    colormapImageFilter->SetColormap( RGBFilterType::Jet );
-//    colormapImageFilter->Update();
-//
-//    std::stringstream ss;
-//    ss << "output_" << threshold << "_" << level << ".png";
-//
-//    typedef itk::ImageFileWriter<RGBImageType> FileWriterType;
-//    FileWriterType::Pointer writer = FileWriterType::New();
-//    writer->SetFileName(ss.str());
-//    writer->SetInput(colormapImageFilter->GetOutput());
-//    writer->Update();
-//
-//}
+        resultImage = otsu->GetOutput();
+//        resultImage = imfill(resultImage);
+//            image = negativeImage(image);
+        GrayImage::Pointer finalResult = removeSmallObject(resultImage);
+            writeImage(fileOut, getFileNameWithoutExtension(fileName), finalResult);
+//        }
+    }
+}
